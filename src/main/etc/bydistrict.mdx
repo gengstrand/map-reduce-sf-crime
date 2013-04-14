@@ -1,0 +1,4 @@
+select {([Measures].[crimes], [Time].[2013])} ON COLUMNS,
+  {[District].[All Districts]} ON ROWS
+from [sfcrime]
+where [Category].[All Categories]

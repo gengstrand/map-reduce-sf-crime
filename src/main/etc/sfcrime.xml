@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<Schema name="sfcrime">
+
+<Cube name="sfcrime" defaultMeasure="crimes">
+  <Table name="fact"/>
+  <Dimension name="District" foreignKey="district_id">
+    <Hierarchy hasAll="true" primaryKey="district_id" allMemberName="All Districts" defaultMember="All Districts">
+      <Table name="district"/>
+      <Level name="name" column="name" uniqueMembers="true"/>
+    </Hierarchy>
+  </Dimension>
+  <Dimension name="Category" foreignKey="category_id">
+    <Hierarchy hasAll="true" primaryKey="category_id" allMemberName="All Categories" defaultMember="All Categories">
+      <Table name="category"/>
+      <Level name="name" column="name" uniqueMembers="true"/>
+    </Hierarchy>
+  </Dimension>
+  <Dimension name="Time" foreignKey="time_id" type="TimeDimension">
+    <Hierarchy hasAll="false" primaryKey="time_id" defaultMember="[Time].[2013].[1].[1]">
+      <Table name="timeperiod"/>
+      <Level name="year" ordinalColumn="year" type="Numeric" column="year" uniqueMembers="false" levelType="TimeYears"/>
+      <Level name="month" ordinalColumn="month" type="Numeric" column="month" uniqueMembers="false" levelType="TimeMonths"/>
+      <Level name="week" ordinalColumn="week" type="Numeric" column="week" uniqueMembers="false" levelType="TimeWeeks"/>
+      <Level name="day" ordinalColumn="day" type="Numeric" column="day" uniqueMembers="false" levelType="TimeDays"/>
+    </Hierarchy>
+  </Dimension>
+  <Measure name="crimes" column="crimes" aggregator="sum"/>
+</Cube>
+
+</Schema>

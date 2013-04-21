@@ -27,8 +27,19 @@ import java.util.List;
 
 import au.com.bytecode.opencsv.CSVReader;
 
+/**
+ * helper functions for extracting data from the type of files
+ * that are normally output from a hadoop map/reduce job
+ * @author glenn
+ */
 public abstract class DataFile {
 
+	/**
+	 * extract the keys from the output of a hadoop map/reduce job
+	 * @param fn holds the fully qualified path and file
+	 * @return a list of keys
+	 * @throws IOException
+	 */
     public static List<String> extractKeys(String fn) throws IOException {
     	List<String> retVal = new ArrayList<String>();
     	BufferedReader br = new BufferedReader(new FileReader(fn));
@@ -45,6 +56,12 @@ public abstract class DataFile {
     	return retVal;
     }
     
+    /**
+     * wraps open csv to extract the contents of a line from a csv file
+     * @param line holds a comma delimited string of values
+     * @return the values as a string array
+     * @throws IOException
+     */
     public static String[] getColumns(String line) throws IOException {
 		CSVReader reader = new CSVReader(new InputStreamReader(new ByteArrayInputStream(line.getBytes())));
 		String[] retVal = reader.readNext();

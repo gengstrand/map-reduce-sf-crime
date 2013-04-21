@@ -35,20 +35,54 @@ import java.util.Map;
 
 import com.dynamicalsoftware.util.DataFile;
 
+/**
+ * responsible for populating the star schema based on hadoop map/reduce output files
+ * @author glenn
+ */
 public class LoadStarDB {
+	
+	/**
+	 * connection to the relational database where OLAP will get its data
+	 */
 	private Connection db = null;
+	
+	/**
+	 * maps table name to last used primary key
+	 */
 	private Map<String, Integer> lastPrimaryKey = new HashMap<String, Integer>();
+	
+	/**
+	 * list of categories extracted from data
+	 */
 	private List<String> categories = null;
+	
+	/**
+	 * list of districts extracted from data
+	 */
 	private List<String> districts = null;
+	
+	/**
+	 * maps a date to the primary key of the corresponding row in the time period table
+	 */
 	private final java.util.Map<Date, Integer> timeperiodLookup = new HashMap<Date, Integer>();	
+	
+	/**
+	 * formats date for insertion into the relational database
+	 */
 	private final DateFormat df = new SimpleDateFormat("MM/dd/yyyy");
+	
+	/**
+	 * parses date from the map/reduce job output files
+	 */
 	private final DateFormat kdf = new SimpleDateFormat("yyyy/MM/dd");
-	
-	private static final long millisecondsInADay = 1000l * 60l * 60l * 24l;
-	private static final long millisecondsInAWeek = millisecondsInADay * 7l;
-	private static final long millisecondsInAMonth = millisecondsInAWeek * 4l;
-	private static final long millisecondsInAYear = millisecondsInAMonth * 12l;
-	
+
+	/**
+	 * inserts a row into a table in the relational database
+	 * @param table is the name of the table
+	 * @param row contains the information to be inserted
+	 * @return the primary key of this row
+	 * @throws SQLException
+	 */
 	private int insert(String table, DataRecord row) throws SQLException {
 		int retVal = 0;
 		Statement s = db.createStatement();
@@ -68,18 +102,35 @@ public class LoadStarDB {
 		return retVal;
 	}
 
+	/**
+	 * inserts a category row into the database
+	 * @param category is the name of the category
+	 * @return the primary key for the inserted row
+	 * @throws SQLException
+	 */
 	private int insertCategory(String category) throws SQLException {
 		DataRecord dr = new DataRecord();
 		dr.put("name", category);
 		return insert("category", dr);
 	}
 
+	/**
+	 * inserts a district row into the database
+	 * @param district is the name of the district
+	 * @return the primary key for the inserted row
+	 * @throws SQLException
+	 */
 	private int insertDistrict(String district) throws SQLException {
 		DataRecord dr = new DataRecord();
 		dr.put("name", district);
 		return insert("district", dr);
 	}
 		
+	/**
+	 * responsible for breaking down a date into year, month, week, and day
+	 * @param dr holds the breakdown
+	 * @param d is the date to be broken down
+	 */
 	private void setTimePeriod(DataRecord dr, Date d) {
 		Calendar cal = Calendar.getInstance();
 		cal.setTime(d);
@@ -88,7 +139,13 @@ public class LoadStarDB {
 		dr.put("week", cal.get(Calendar.WEEK_OF_MONTH));
 		dr.put("day", cal.get(Calendar.DAY_OF_MONTH));
 	}
-	
+
+	/**
+	 * inserts a new time period row into the database
+	 * @param d the date to be inserted if it has not already done so previously
+	 * @return the primary key for this row (new or old)
+	 * @throws SQLException
+	 */
 	private int insertTimePeriod(Date d) throws SQLException {
 		int retVal = 0;
 		if (timeperiodLookup.containsKey(d)) {
@@ -102,6 +159,14 @@ public class LoadStarDB {
 		return retVal;
 	}
 	
+	/**
+	 * inserts a row into the fact table
+	 * @param districtId foreign key into corresponding row of district table
+	 * @param categoryId foreign key into corresponding row of category table
+	 * @param timeId foreign key into corresponding row of timeperiod table
+	 * @param crimes is the total crimes committed in this district of this category at his time
+	 * @throws SQLException
+	 */
 	private void insertFact(int districtId, int categoryId, int timeId, int crimes) throws SQLException {
 		DataRecord dr = new DataRecord();
 		dr.put("district_id", districtId);
@@ -111,6 +176,13 @@ public class LoadStarDB {
 		insert("fact", dr);
 	}
 	
+	/**
+	 * load category and district data from files created during the San Francisco Crime map/reduce job
+	 * @param categoryReport fully qualified path and file to bycategory/part-00000
+	 * @param districtReport fully qualified path and file to bydistrict/part-00000
+	 * @throws IOException
+	 * @throws SQLException
+	 */
 	private void setup(String categoryReport, String districtReport) throws IOException, SQLException {
 		categories = DataFile.extractKeys(categoryReport);
 		districts = DataFile.extractKeys(districtReport);
@@ -122,19 +194,40 @@ public class LoadStarDB {
 		}
 	}
 
+	/**
+	 * truncate a table so that we know what the next primary key value will be
+	 * @param name identifies which table to truncate
+	 * @throws SQLException
+	 */
 	private void truncate(String name) throws SQLException {
 		Statement s = db.createStatement();
 		s.execute("truncate table ".concat(name));
 		s.close();
 	}
-	
+
+	/**
+	 * truncate all tables in the star schema that this job is to repopulate
+	 * @throws SQLException
+	 */
 	private void reset() throws SQLException {
 		truncate("fact");
 		truncate("category");
 		truncate("district");
 		truncate("timeperiod");
 	}
-	
+
+	/**
+	 * prepare to load the star schema for OLAP
+	 * @param categoryReport fully qualified path and file to bycategory/part-00000
+	 * @param districtReport fully qualified path and file to bydistrict/part-00000
+	 * @param dbhost name of the host where mysql is running
+	 * @param dbname name of the database where the star schema has been created
+	 * @param dbuser user name with which to authenticate with mysql
+	 * @param dbpassword password with which to authenticate with mysql
+	 * @throws ClassNotFoundException
+	 * @throws SQLException
+	 * @throws IOException
+	 */
 	private LoadStarDB(String categoryReport, String districtReport, String dbhost, String dbname, String dbuser, String dbpassword) throws ClassNotFoundException, SQLException, IOException {
 		Class.forName("com.mysql.jdbc.Driver");
 		String cs = MessageFormat.format("jdbc:mysql://{0}/{1}?user={2}&password={3}&noAccessToProcedureBodies=true", new Object[]{dbhost, dbname, dbuser, dbpassword});
@@ -143,6 +236,12 @@ public class LoadStarDB {
 		setup(categoryReport, districtReport);
 	}
 	
+	/**
+	 * process the SanFranciscoCrimPrepOlap map/reduce job output to populate the timeperiod and fact tables
+	 * @param dataFile fullyqualified path and file to star/part-00000
+	 * @throws IOException
+	 * @throws ParseException
+	 */
 	private void processData(String dataFile) throws IOException, ParseException {
     	BufferedReader br = new BufferedReader(new FileReader(dataFile));
     	String line = br.readLine();
@@ -172,6 +271,10 @@ public class LoadStarDB {
     	br.close();
 	}
 	
+	/**
+	 * CLI for running this job
+	 * @param args
+	 */
     public static void main(String[] args) {
     	if (args.length == 7) {
     		try {
@@ -190,12 +293,17 @@ public class LoadStarDB {
     		System.err.println("\nusage: java -jar sfcrime.hadoop.mapreduce.jobs-0.0.1-SNAPSHOT.jar com.dynamicalsoftware.olap.etl.LoadStarDB path/to/category/report path/to/district/report path/to/star/data dbhost dbname dbuser dbpassword\n");
     	}
     }
-	
+
+    /**
+     * represents a record to be inserted into a table
+     * @author glenn
+     */
 	class DataRecord extends HashMap<String, Object> {
 
 		@Override
 		public String toString() {
 			StringBuffer retVal = new StringBuffer();
+			// generate the field list part of the SQL insert statement
 			retVal.append("(");
 			boolean first = true;
 			for (String key : keySet()) {
@@ -206,6 +314,7 @@ public class LoadStarDB {
 				}
 				retVal.append(key);
 			}
+			// generate the values part of the SQL insert statement
 			retVal.append(") values (");
 			first = true;
 			for (String key : keySet()) {

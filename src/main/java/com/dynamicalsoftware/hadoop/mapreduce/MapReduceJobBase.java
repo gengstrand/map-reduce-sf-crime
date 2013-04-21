@@ -28,20 +28,48 @@ import java.io.InputStreamReader;
 
 import com.dynamicalsoftware.util.DataFile;
 
+/**
+ * base class contains factored out commonality between the various map/reduce jobs
+ * @author glenn
+ */
 public abstract class MapReduceJobBase {
 
+	/**
+	 * zero based index into sf crime data where the category column is found
+	 */
 	protected static final int CATEGORY_COLUMN_INDEX = 1;
+	
+	/**
+	 * zero based index into sf crime data where the day of the week column is found
+	 */
 	protected static final int DAY_OF_WEEK_COLUMN_INDEX = 3;
+	
+	/**
+	 * zero based index into sf crime data where the date column is found
+	 */
 	protected static final int DATE_COLUMN_INDEX = 4;
+	
+	/**
+	 * zero based index into sf crime data where the distrct column is found
+	 */
 	protected static final int DISTRICT_COLUMN_INDEX = 6;
 
+	/**
+	 * the date format for dates in the sf crime data file
+	 */
 	protected static final DateFormat df = new SimpleDateFormat("MM/dd/yyyy");
+	
+	/**
+	 * the date format for dates as stored in the hadoop map/reduce output
+	 */
 	protected static final DateFormat outputDateFormat = new SimpleDateFormat("yyyy/MM/dd");
 
-	protected static String[] getColumns(String line) throws IOException {
-		return DataFile.getColumns(line);
-	}
-	
+	/**
+	 * convert the string representation of the date column from the sf crime data to a date type
+	 * @param value contains string representation of full date/time stamp
+	 * @return date object with time truncated
+	 * @throws ParseException
+	 */
 	protected static Date getDate(String value) throws ParseException {
 		Date retVal = null;
 		String[] dp = value.split(" ");

@@ -44,21 +44,42 @@ import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.TextInputFormat;
 import org.apache.hadoop.mapred.TextOutputFormat;
 
+import com.dynamicalsoftware.util.DataFile;
+
+/**
+ * map/reduce job responsible for generating weekly summaries by category and district
+ * @author glenn
+ */
 public class SanFranciscoCrime extends MapReduceJobBase {
 
 	private static Logger log = Logger.getLogger(SanFranciscoCrime.class.getCanonicalName());
 
+	/**
+	 * factored out common functionality of all the mapper classes
+	 */
 	public static abstract class Map extends MapReduceBase implements Mapper<LongWritable, Text, Text, Text> {
 
+		/**
+		 * zero based index identifies which column in the input data should serve as the key
+		 */
 		protected int keyID = 0;
-		protected int valueID = 0;
 		
+		/**
+		 * zero based index identifies which column in the input data shold serve as the value
+		 */
+		protected int valueID = 0;
+
+		/**
+		 * only the key and the value should be passed through to the intermediate output
+		 */
 		public void map(LongWritable key, Text value, OutputCollector<Text, Text> output, Reporter reporter) throws IOException {
 			String line = value.toString();
 			try {
-				String[] col = getColumns(line);
+				String[] col = DataFile.getColumns(line);
 				if (col != null) {
+					// make sure there is enough columns in the data
 					if (col.length >= (DISTRICT_COLUMN_INDEX + 1)) {
+						// filter out the first row which contains the column header names
 						if (!"date".equalsIgnoreCase(col[valueID])) {
 							Text tk = new Text();
 							tk.set(col[keyID]);
@@ -81,89 +102,108 @@ public class SanFranciscoCrime extends MapReduceJobBase {
 		}
 		
 	}
-	
+
+	/**
+	 * mapper for category by day of the week
+	 * @author glenn
+	 */
 	public static class CategoryMapByDotw extends Map {
 		public CategoryMapByDotw() {
 			keyID = CATEGORY_COLUMN_INDEX;
 			valueID = DAY_OF_WEEK_COLUMN_INDEX;
 		}
 	}
-		
+
+	/**
+	 * mapper for district by day of the week
+	 * @author glenn
+	 */
 	public static class DistrictMapByDotw extends Map {
 		public DistrictMapByDotw() {
 			keyID = DISTRICT_COLUMN_INDEX;
 			valueID = DAY_OF_WEEK_COLUMN_INDEX;
 		}
 	}
-	
+
+	/**
+	 * mapper for category by date
+	 * @author glenn
+	 */
 	public static class CategoryMapByDate extends Map {
 		public CategoryMapByDate() {
 			keyID = CATEGORY_COLUMN_INDEX;
 			valueID = DATE_COLUMN_INDEX;
 		}
 	}
-		
+
+	/**
+	 * mapper for district by date
+	 * @author glenn
+	 */
 	public static class DistrictMapByDate extends Map {
 		public DistrictMapByDate() {
 			keyID = DISTRICT_COLUMN_INDEX;
 			valueID = DATE_COLUMN_INDEX;
 		}
 	}
-	
+
+	/**
+	 * responsible for generating the report output based on the intermediate output from the mappers
+	 * @author glenn
+	 */
 	public static class ReduceByWeek extends MapReduceBase implements Reducer<Text, Text, Text, Text> {
 		
 		private static final long millisecondsInAWeek = 1000l * 60l * 60l * 24l * 7l;
 		
+		/**
+		 * reduces the data (category or district) into weekly totals
+		 */
 		public void reduce(Text key, Iterator<Text> values, OutputCollector<Text, Text> output, Reporter reporter) throws IOException {
 			List<String> incidents = new ArrayList<String>();
+			//compile the individual incident dates into a list
 			while (values.hasNext()) {
 				incidents.add(values.next().toString());
 			}
 			if (incidents.size() > 0) {
-				// sort that list by day of the week
+				// sort that list by date
 				Collections.sort(incidents);
-				try {
-					Date start = getDate(incidents.get(0));
-					java.util.Map<Integer, Integer> weekSummary = new HashMap<Integer, Integer>();
-					for (int i=0; i<16; i++) {
-						weekSummary.put(i, 0);
-					}
-					// aggregate the counts by day of the week
-					for (String incidentDay : incidents) {
-						try {
-							Date d = getDate(incidentDay);
-							Calendar cal = Calendar.getInstance();
-							cal.setTime(d);
-							int week = cal.get(Calendar.WEEK_OF_MONTH);
-							int month = cal.get(Calendar.MONTH);
-							int bucket = (month * 5) + week;
-							if (weekSummary.containsKey(bucket)) {
-								weekSummary.put(bucket, new Integer(weekSummary.get(bucket).intValue() + 1));
-							} else {
-								weekSummary.put(bucket, new Integer(1));
-							}
-						} catch (ParseException pe) {
-							log.warning(MessageFormat.format("Invalid date {0}", new Object[]{incidentDay}));
-						}
-					}
-					// generate the output report line
-					StringBuffer rpt = new StringBuffer();
-					boolean first = true;
-					for (int week : weekSummary.keySet()) {
-						if (first) {
-							first = false;
-						} else {
-							rpt.append(",");
-						}
-						rpt.append(new Integer(weekSummary.get(week)).toString());
-					}
-					String list = rpt.toString();
-					Text tv = new Text();
-					tv.set(list);
-					output.collect(key, tv);
-				} catch (ParseException e) {
-					log.log(Level.SEVERE, MessageFormat.format("invalid date {0}", new Object[]{incidents.get(0)}), e);
+				java.util.Map<Integer, Integer> weekSummary = new HashMap<Integer, Integer>();
+				for (int i=0; i<16; i++) {
+					weekSummary.put(i, 0);
 				}
+				// aggregate each incident into weekly buckets
+				for (String incidentDay : incidents) {
+					try {
+						Date d = getDate(incidentDay);
+						Calendar cal = Calendar.getInstance();
+						cal.setTime(d);
+						int week = cal.get(Calendar.WEEK_OF_MONTH);
+						int month = cal.get(Calendar.MONTH);
+						int bucket = (month * 5) + week;
+						if (weekSummary.containsKey(bucket)) {
+							weekSummary.put(bucket, new Integer(weekSummary.get(bucket).intValue() + 1));
+						} else {
+							weekSummary.put(bucket, new Integer(1));
+						}
+					} catch (ParseException pe) {
+						log.warning(MessageFormat.format("Invalid date {0}", new Object[]{incidentDay}));
+					}
+				}
+				// generate the output report line
+				StringBuffer rpt = new StringBuffer();
+				boolean first = true;
+				for (int week : weekSummary.keySet()) {
+					if (first) {
+						first = false;
+					} else {
+						rpt.append(",");
+					}
+					rpt.append(new Integer(weekSummary.get(week)).toString());
+				}
+				String list = rpt.toString();
+				Text tv = new Text();
+				tv.set(list);
+				output.collect(key, tv);
 			}
 		}
 		

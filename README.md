@@ -3,11 +3,11 @@ map-reduce-sf-crime
 
 This project demonstrates how to use various big data open source technologies to analyze San Francisco Crime Data. This project illustrates the use of these technologies for educational purposes only.
 
-SF Crime Big Data Demonstration
+Discovering Big Data with Open Source
 
-http://www.dynamicalsoftware.com
+http://www.dynamicalsoftware.com/analytics/oss
 
-http://www.apache.org/licenses/LICENSE-2.0.html
+http://www.docstoc.com/docs/154446384/Big-Data-with-Open-Source
 
 Apache Hadoop
 
